@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>실시간 멀티 방치형 드래곤 레이드</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 15px; }
+    .card { background: #1e1e1e; padding: 15px; border-radius: 12px; margin: 12px auto; max-width: 480px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    .hp-bar { width: 100%; height: 25px; background: #333; border-radius: 12px; overflow: hidden; margin: 10px 0; border: 1px solid #444; }
+    .hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff416c, #ff4b2b); transition: width 0.2s; }
+    .btn { padding: 10px 16px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 5px; }
+    .btn-gacha { background: #f1c40f; color: #000; width: 80%; }
+    .btn-coupon { background: #9b59b6; color: #fff; }
+    .btn-attack { background: #e74c3c; color: #fff; width: 80%; }
+    #dragon { font-size: 90px; cursor: pointer; user-select: none; margin: 10px 0; display: inline-block; transition: transform 0.1s; }
+    #dragon:active { transform: scale(0.85); }
+    #notice { color: #2ecc71; font-weight: bold; min-height: 24px; margin: 10px 0; }
+    input[type="text"] { padding: 8px; font-size: 14px; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #fff; }
+    ol { text-align: left; padding-left: 25px; margin: 0; }
+    li { margin: 6px 0; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+  <h2>🐉 실시간 멀티 드래곤 레이드</h2>
+  <div id="notice"></div>
+
+  <div id="loginBox" class="card">
+    <h3>닉네임을 입력하세요</h3>
+    <input type="text" id="nickInput" placeholder="용사 닉네임" style="width: 70%; font-size: 16px;">
+    <br><br>
+    <button class="btn btn-attack" onclick="join()">레이드 참전</button>
+  </div>
+
+  <div id="gameUI" style="display:none;">
+    <div class="card">
+      <p style="margin: 5px 0;">💰 골드: <span id="myGold" style="color:#f1c40f; font-weight:bold;">0</span> (초당 자동 수급)</p>
+      <p style="margin: 5px 0;">🗡️ 장착 무기: <span id="myWeapon" style="color:#3498db;">녹슨 단검</span></p>
+      <p style="margin: 5px 0;">⚔️ 공격력: <span id="myDmg" style="color:#e74c3c;">10</span></p>
+      <button class="btn btn-gacha" onclick="doGacha()">🎁 무기 뽑기 (50 골드)</button>
+    </div>
+
+    <div class="card">
+      <h4 style="margin: 5px 0;">🎟️ 시크릿 쿠폰 입력</h4>
+      <input type="text" id="couponInput" placeholder="쿠폰 코드를 입력하세요">
+      <button class="btn btn-coupon" onclick="useCoupon()">사용</button>
+    </div>
+
+    <div class="card">
+      <div class="hp-bar"><div id="dragonHpFill" class="hp-fill"></div></div>
+      <p id="dragonHpText" style="font-weight: bold;">100000 / 100000</p>
+      <div id="dragon" onclick="attack()">🐉</div>
+      <p style="font-size: 12px; color: #888;">터치해서 공격하거나 가만히 방치하세요!</p>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">🏆 실시간 딜량 랭킹</h3>
+      <ol id="rankList"></ol>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+
+    function join() {
+      const name = document.getElementById('nickInput').value;
+      if(name) {
+        socket.emit('join', name);
+        document.getElementById('loginBox').style.display = 'none';
+        document.getElementById('gameUI').style.display = 'block';
+      }
+    }
+
+    function attack() { socket.emit('attack'); }
+    function doGacha() { socket.emit('gacha'); }
+    
+    function useCoupon() {
+      const code = document.getElementById('couponInput').value;
+      if (code) {
+        socket.emit('useCoupon', code);
+        document.getElementById('couponInput').value = '';
+      }
+    }
+
+    socket.on('init', ({ dragon, users }) => { updateDragon(dragon); updateRank(users); });
+    socket.on('updateDragon', updateDragon);
+    socket.on('updateUsers', (users) => {
+      const my = users[socket.id];
+      if(my) {
+        document.getElementById('myGold').innerText = my.gold;
+        document.getElementById('myWeapon').innerText = my.weapon;
+        document.getElementById('myDmg').innerText = my.damage;
+      }
+      updateRank(users);
+    });
+    socket.on('notify', (msg) => { document.getElementById('notice').innerText = msg; });
+
+    function updateDragon(dragon) {
+      const pct = (dragon.hp / dragon.maxHp) * 100;
+      document.getElementById('dragonHpFill').style.width = pct + '%';
+      document.getElementById('dragonHpText').innerText = `${dragon.hp} / ${dragon.maxHp}`;
+    }
+
+    function updateRank(users) {
+      const sorted = Object.values(users).sort((a,b) => b.totalDamage - a.totalDamage);
+      const rankList = document.getElementById('rankList');
+      rankList.innerHTML = '';
+      sorted.forEach(u => {
+        const li = document.createElement('li');
+        li.innerHTML = `<b>${u.nickname}</b> - ${u.totalDamage.toLocaleString()} 딜 <small style="color:#aaa;">(${u.weapon})</small>`;
+        rankList.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html>
