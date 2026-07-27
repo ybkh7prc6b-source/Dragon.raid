@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>👑 GM 관제탑</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; text-align: center; }
+    .card { background: #222; border: 1px solid #444; border-radius: 10px; padding: 15px; margin: 15px auto; max-width: 500px; text-align: left; }
+    .btn { padding: 8px 12px; margin: 4px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    .btn-gold { background: #f1c40f; color: #000; }
+    .btn-dmg { background: #e74c3c; color: #fff; }
+    .btn-rank { background: #9b59b6; color: #fff; }
+    input { padding: 6px; border-radius: 4px; border: 1px solid #555; background: #333; color: #fff; width: 80px; }
+  </style>
+</head>
+<body>
+  <h1>👑 GM 관제탑 (플레이어 조작)</h1>
+  <hr style="border-color: #333;">
+
+  <div id="userList"></div>
+
+  <script>
+    const socket = io();
+
+    socket.on('updateUsers', (users) => {
+      const container = document.getElementById('userList');
+      container.innerHTML = '';
+
+      const userArray = Object.values(users);
+      if(userArray.length === 0) {
+        container.innerHTML = '<p style="color:#888;">현재 접속 중인 플레이어가 없습니다.</p>';
+        return;
+      }
+
+      userArray.forEach(u => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `
+          <h3>👤 ${u.nickname}</h3>
+          <p>💰 골드: <b>${u.gold}</b> | ⚔️ 공격력: <b>${u.damage}</b> | 🏆 총 딜량: <b>${u.totalDamage}</b></p>
+          <hr style="border-color:#333;">
+          
+          <div style="margin-bottom: 8px;">
+            <input type="number" id="gold_${u.id}" placeholder="수량" value="100">
+            <button class="btn btn-gold" onclick="sendAction('${u.id}', 'addGold', 'gold_${u.id}')">💰 골드 지급</button>
+          </div>
+
+          <div style="margin-bottom: 8px;">
+            <input type="number" id="dmg_${u.id}" placeholder="공격력" value="500">
+            <button class="btn btn-dmg" onclick="sendAction('${u.id}', 'setDamage', 'dmg_${u.id}')">⚔️ 공격력 수정</button>
+          </div>
+
+          <div>
+            <input type="number" id="rank_${u.id}" placeholder="총 딜량" value="999999">
+            <button class="btn btn-rank" onclick="sendAction('${u.id}', 'setRankDamage', 'rank_${u.id}')">🏆 랭킹 조작</button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    });
+
+    function sendAction(targetId, action, inputId) {
+      const val = document.getElementById(inputId).value;
+      if (val !== '') {
+        socket.emit('adminAction', { targetId, action, value: val });
+      }
+    }
+  </script>
+</body>
+</html>
